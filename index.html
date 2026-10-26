@@ -32,8 +32,9 @@ textarea{width:100%;height:110px}table{width:100%;border-collapse:collapse;font-
 <label>Язык <select id="lang"><option value="ru">Рус</option><option value="en">Eng</option></select></label>
 <label>Режим <select id="mode"><option value="train">Тренировка</option><option value="mentor">Наставник</option><option value="teacher">Учитель</option></select></label>
 <label>Тип <select id="type"><option value="letters">Буквы</option><option value="words">Слова</option><option value="digits">Цифры</option><option value="symbols">Символы</option><option value="mixed">Смешанный</option></select></label>
-<button id="sel">☰ Задание</button><button id="wed">📝 Слова</button><button id="about">ℹ️</button>
+<button id="sel">☰ Задание</button><button id="accb">★ Акцент</button><button id="wed">📝 Слова</button><button id="about">ℹ️</button>
 </div>
+<div class="row" id="accrow"><label>Частота акцента ×<input id="accw" type="range" min="2" max="10" step="1" value="4"><b id="accwv"></b></label><span id="accinfo" style="font-size:13px;opacity:.8"></span></div>
 <div class="row"><label>Групп <input id="groups" type="number" min="1" max="50" value="5" style="width:64px"></label>
 <label>Знаков в группе <input id="glen" type="number" min="1" max="20" value="5" style="width:64px"></label>
 <label><input type="checkbox" id="hide">🙈 Скрыть упражнение</label>
@@ -54,9 +55,10 @@ textarea{width:100%;height:110px}table{width:100%;border-collapse:collapse;font-
 <div class="card row" style="justify-content:space-between"><span id="st"></span><span><button id="det">Детали</button> <button id="rst">🔄 Сброс</button></span></div>
 
 <dialog id="d1"><h3>Задание — выбор символов</h3><div class="chars" id="chars"></div><div class="row"><button id="all">Выбрать все</button><button id="none">Снять все</button><button class="d">Отмена</button><button class="p" id="apply">Применить</button></div></dialog>
+<dialog id="d5"><h3>Акцент — что подучить</h3><div style="font-size:13px;opacity:.8;margin-bottom:6px">Показаны знаки из «Задания». Отмеченные будут выпадать чаще (множитель — ползунок «Частота акцента»). Если не отмечено ничего или отмечено всё — частота у всех одинаковая.</div><div class="chars" id="achars"></div><div class="row"><button id="aall">Выбрать все</button><button id="anone">Снять все</button><button class="d">Отмена</button><button class="p" id="aapply">Применить</button></div></dialog>
 <dialog id="d2"><h3>Детальная статистика сессии</h3><div id="log"></div><div class="row"><button class="d">Закрыть</button></div></dialog>
 <dialog id="d3"><h3>Редактор слов</h3><div>Русские слова</div><textarea id="wru"></textarea><div>Английские слова</div><textarea id="wen"></textarea><div style="font-size:12px">Каждое слово на отдельной строке.</div><div class="row"><button id="wrs">Сбросить</button><button class="d">Отмена</button><button class="p" id="wap">Применить</button></div></dialog>
-<dialog id="d4"><h3>Тренажер Азбуки Морзе</h3><p>Русский и английский, режимы Тренировка (группы знаков на слух), Наставник (по одному знаку с разбором ошибки) и Учитель (стучите ключом — приложение декодирует), маска символа, статистика, 3 темы.</p><div class="row"><button class="d">Закрыть</button></div></dialog>
+<dialog id="d4"><h3>Тренажер Азбуки Морзе</h3><p>Русский и английский, режимы Тренировка (группы знаков на слух, с возможностью акцента на выбранных знаках), Наставник (по одному знаку с разбором ошибки) и Учитель (стучите ключом — приложение декодирует), маска символа, статистика, 3 темы.</p><div class="row"><button class="d">Закрыть</button></div></dialog>
 </main>
 <script>
 const $=i=>document.getElementById(i);
@@ -65,20 +67,27 @@ const RUS={А:'.-',Б:'-...',В:'.--',Г:'--.',Д:'-..',Е:'.',Ж:'...-',З:'--.
 const DIG={1:'.----',2:'..---',3:'...--',4:'....-',5:'.....',6:'-....',7:'--...',8:'---..',9:'----.',0:'-----'};
 const SYM={'.':'......','!':'-.-.--',',':'--..--','?':'..--..','/':'-..-.','=':'-...-','+':'.-.-.','-':'-....-',':':'---...',';':'-.-.-.','(':'-.--.',')':'-.--.-','@':'.--.-.'};
 const WORDS={ru:'CQ,ТЕСТ,РАДИО,СВЯЗЬ,АНТЕННА,ЭФИР,МОРЗЕ,КЛЮЧ,ТОН,ПРИЕМ,ПЕРЕДАЧА,ЕКАТ,УРАЛ,ПРИВЕТ',en:'CQ,TEST,RADIO,MORSE,KEY,ANTENNA,SIGNAL,POWER,CALL,RIG,WIRE,TOWER,HELLO,SKY'};
-let S={theme:matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light',lang:'ru',mode:'train',type:'letters',groups:5,glen:5,hide:true,dpm:710,lpm:48,tone:700,vol:50,mask:'t',auto:false,sel:{},words:{ru:WORDS.ru.split(','),en:WORDS.en.split(',')}};
+let S={theme:matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light',lang:'ru',mode:'train',type:'letters',groups:5,glen:5,hide:true,dpm:710,lpm:48,tone:700,vol:50,mask:'t',auto:false,sel:{},acc:{},accw:4,words:{ru:WORDS.ru.split(','),en:WORDS.en.split(',')}};
 try{Object.assign(S,JSON.parse(localStorage.getItem('morse2')||'{}'))}catch(e){}
 const save=()=>{try{localStorage.setItem('morse2',JSON.stringify(S))}catch(e){}};
 const table=()=>({...(S.lang=='ru'?RUS:LAT),...DIG,...SYM});
 const pool=t=>t=='letters'?Object.keys(S.lang=='ru'?RUS:LAT):t=='digits'?Object.keys(DIG):Object.keys(SYM);
 const active=t=>{const k=S.lang+t;return(S.sel[k]||pool(t)).filter(c=>pool(t).includes(c))};
+// акцент: знаки, отмеченные в «Акценте» и при этом входящие в «Задание»
+const accent=t=>{const a=active(t);return(S.acc[S.lang+t]||[]).filter(c=>a.includes(c))};
+const typesOf=()=>S.type=='mixed'?['letters','digits','symbols']:S.type=='words'?[]:[S.type];
 let revealed=false,target='',stats={ok:0,n:0,ser:0,max:0,log:[]},ctx,nodes=[],playing=false;
 const rnd=a=>a[Math.random()*a.length|0];
+// взвешенный выбор: знаки акцента имеют вес accw, остальные — 1.
+// Если акцент пуст или совпадает со всем заданием — веса равны, генерация не меняется.
+function wpick(items){let tot=0;for(const i of items)tot+=i.w;let r=Math.random()*tot;for(const i of items){r-=i.w;if(r<0)return i.c}return items[items.length-1].c}
 function genOne(){const t=S.type;
  if(t=='words')return rnd(S.words[S.lang].length?S.words[S.lang]:['CQ']);
- const p=t=='mixed'?[...active('letters'),...active('digits'),...active('symbols')]:active(t);
- if(!p.length)return'E';
- if(S.mode!='train')return rnd(p);
- let g='';for(let i=0;i<S.glen;i++)g+=rnd(p);return g;}
+ const items=[];
+ typesOf().forEach(ty=>{const ac=S.mode=='train'?new Set(accent(ty)):new Set();active(ty).forEach(c=>items.push({c,w:ac.has(c)?S.accw:1}))});
+ if(!items.length)return'E';
+ if(S.mode!='train')return rnd(items).c;
+ let g='';for(let i=0;i<S.glen;i++)g+=wpick(items);return g;}
 function generate(){stopAudio();const m=S.mode;
  target=m=='train'?Array.from({length:S.groups},genOne).join(' '):genOne();
  revealed=false;$('res').textContent='';$('ans').value='';showEx();
@@ -103,15 +112,13 @@ function beep(on){const c=audio();if(on){beep.o=c.createOscillator();beep.g=c.cr
 function record(exp,got){const okk=exp==got;stats.n++;if(okk){stats.ok++;stats.ser++;stats.max=Math.max(stats.max,stats.ser)}else stats.ser=0;
  stats.log.push({exp,got,ok:okk});renderStats();return okk}
 
-
 function check(){
     const exp=target.replace(/\s/g,''),got=$('ans').value.toUpperCase().replace(/Ё/g,'Е').replace(/\s/g,'');
     const okk=record(exp,got);revealed=true;showEx();
-    $('res').innerHTML=(okk?'<span class="ok">✓ Верно</span> ':'<span class="er">✗</span> ')+[...exp].map((c,i)=>`<span class="${got[i]==c?'ok':'er'}">${c}</span>`).join('')+(okk?'':` <small>(вы: ${got||'—'})</small>`);
+    $('res').innerHTML=(okk?'<span class="ok">✓ Верно</span> ':'<span class="er">✗</span> ')+[...exp].map((c,i)=>`<span class="${got[i]==c?'ok':'er'}">${c}</span>`).join('')+(okk?'':` <small>(вы: ${got?[...got].map((c,i)=>`<span class="${c==exp[i]?'':'er'}">${c}</span>`).join(''):'—'})</small>`);
     if(S.mode=='mentor'&&!okk){const T=table();$('res').innerHTML+=`<div>${exp}: ${T[exp]||''}</div>`;play();}
     const delay = (S.mode=='train' && !okk) ? 4000 : 2000;
     setTimeout(generate, delay);}
-
 
 function renderStats(){$('st').textContent=`Правильно: ${stats.ok}/${stats.n} (${stats.n?Math.round(stats.ok/stats.n*100):0}%) Серия: ${stats.ser} (Макс: ${stats.max})`}
 // teacher keying
@@ -129,13 +136,27 @@ addEventListener('keyup',e=>{if(e.code=='Space'&&S.mode=='teacher')keyUp()});
 // dialogs
 document.querySelectorAll('.d').forEach(b=>b.onclick=()=>b.closest('dialog').close());
 let tmp=[];
-function openSel(){const ts=S.type=='mixed'?['letters','digits','symbols']:S.type=='words'?[]:[S.type];
+function openSel(){const ts=typesOf();
  if(!ts.length){alert('Для слов используйте редактор слов 📝');return}
  $('chars').innerHTML='';tmp=ts;ts.forEach(t=>{const a=active(t);pool(t).forEach(c=>{const l=document.createElement('label');l.innerHTML=`<input type="checkbox" data-t="${t}" value="${c}" ${a.includes(c)?'checked':''}>${c}`;$('chars').append(l)})});$('d1').showModal()}
 $('sel').onclick=openSel;
 $('all').onclick=()=>$('chars').querySelectorAll('input').forEach(i=>i.checked=true);
 $('none').onclick=()=>$('chars').querySelectorAll('input').forEach(i=>i.checked=false);
-$('apply').onclick=()=>{tmp.forEach(t=>S.sel[S.lang+t]=[...$('chars').querySelectorAll(`input[data-t=${t}]:checked`)].map(i=>i.value));save();$('d1').close();generate()};
+$('apply').onclick=()=>{tmp.forEach(t=>S.sel[S.lang+t]=[...$('chars').querySelectorAll(`input[data-t=${t}]:checked`)].map(i=>i.value));save();$('d1').close();ui();generate()};
+// акцент
+let atmp=[];
+function openAcc(){const ts=typesOf();
+ if(!ts.length){alert('Акцент доступен для букв, цифр и символов.');return}
+ $('achars').innerHTML='';atmp=ts;
+ ts.forEach(t=>{const ac=accent(t);active(t).forEach(c=>{const l=document.createElement('label');l.innerHTML=`<input type="checkbox" data-t="${t}" value="${c}" ${ac.includes(c)?'checked':''}>${c}`;$('achars').append(l)})});
+ if(!$('achars').children.length){alert('В «Задании» не выбрано ни одного знака.');return}
+ $('d5').showModal()}
+$('accb').onclick=openAcc;
+$('aall').onclick=()=>$('achars').querySelectorAll('input').forEach(i=>i.checked=true);
+$('anone').onclick=()=>$('achars').querySelectorAll('input').forEach(i=>i.checked=false);
+$('aapply').onclick=()=>{atmp.forEach(t=>S.acc[S.lang+t]=[...$('achars').querySelectorAll(`input[data-t=${t}]:checked`)].map(i=>i.value));save();$('d5').close();ui();generate()};
+function accInfo(){const ts=typesOf();const all=ts.flatMap(t=>accent(t));const tot=ts.flatMap(t=>active(t)).length;
+ $('accinfo').textContent=!all.length?'акцент: не задан':all.length>=tot?'акцент: все знаки (частота равная)':'акцент: '+all.join(' ')}
 $('det').onclick=()=>{const bad={};stats.log.filter(x=>!x.ok).forEach(x=>[...x.exp].forEach((c,i)=>{if(x.got[i]!=c)bad[c]=(bad[c]||0)+1}));
  $('log').innerHTML=`<p>Ошибки по знакам: ${Object.entries(bad).map(([k,v])=>k+'×'+v).join(', ')||'нет'}</p><table><tr><th>Задано</th><th>Ответ</th><th></th></tr>${stats.log.slice(-50).map(x=>`<tr><td>${x.exp}</td><td>${x.got||'—'}</td><td>${x.ok?'✓':'✗'}</td></tr>`).join('')}</table>`;$('d2').showModal()};
 $('rst').onclick=()=>{stats={ok:0,n:0,ser:0,max:0,log:[]};renderStats()};
@@ -144,8 +165,9 @@ $('wrs').onclick=()=>{$('wru').value=WORDS.ru.split(',').join('\n');$('wen').val
 $('wap').onclick=()=>{const f=v=>v.split('\n').map(s=>s.trim().toUpperCase()).filter(Boolean);S.words={ru:f($('wru').value),en:f($('wen').value)};save();$('d3').close()};
 $('about').onclick=()=>$('d4').showModal();
 // controls
-const rg=[['dpm','wpmv',''],['lpm','pausev',''],['tone','tonev',''],['vol','volv','%']];
-function ui(){document.documentElement.dataset.theme=S.theme;['theme','lang','mode','type','mask'].forEach(k=>$(k).value=S[k]);$('groups').value=S.groups;$('glen').value=S.glen;$('hide').checked=S.hide;$('auto').checked=S.auto;rg.forEach(([a,b,s])=>{$(a).value=S[a];$(b).textContent=S[a]+s})}
+const rg=[['dpm','wpmv',''],['lpm','pausev',''],['tone','tonev',''],['vol','volv','%'],['accw','accwv','']];
+function ui(){document.documentElement.dataset.theme=S.theme;['theme','lang','mode','type','mask'].forEach(k=>$(k).value=S[k]);$('groups').value=S.groups;$('glen').value=S.glen;$('hide').checked=S.hide;$('auto').checked=S.auto;rg.forEach(([a,b,s])=>{$(a).value=S[a];$(b).textContent=S[a]+s});
+ const showAcc=S.mode=='train'&&S.type!='words';$('accb').hidden=!showAcc;$('accrow').hidden=!showAcc;if(showAcc)accInfo()}
 ['theme','lang','mode','type','mask'].forEach(k=>$(k).onchange=e=>{S[k]=e.target.value;save();ui();if(k=='mask')showEx();else generate()});
 $('groups').onchange=e=>{S.groups=Math.max(1,Math.min(50,+e.target.value||5));save();generate()};
 $('auto').onchange=e=>{S.auto=e.target.checked;save()};
@@ -153,7 +175,7 @@ $('glen').onchange=e=>{S.glen=Math.max(1,Math.min(20,+e.target.value||5));save()
 $('hide').onchange=e=>{S.hide=e.target.checked;save();showEx()};
 rg.forEach(([a,b,s])=>$(a).oninput=e=>{S[a]=+e.target.value;$(b).textContent=S[a]+s;save()});
 $('gen').onclick=generate;$('play').onclick=()=>{play();if(S.mode!='teacher')$('ans').focus()};$('stop').onclick=stopAudio;$('skip').onclick=generate;$('chk').onclick=check;
-const tips={gen:'Сгенерировать новое упражнение',play:'Воспроизвести упражнение заново',stop:'Остановить воспроизведение',skip:'Пропустить и перейти к следующему упражнению',chk:'Проверить ответ (Enter)',sel:'Выбор знаков для упражнения',wed:'Редактор списков слов',about:'О программе',det:'Подробная статистика сессии',rst:'Сбросить статистику',theme:'Тема оформления',lang:'Язык: русский или английский',mode:'Режим: тренировка, наставник, учитель',type:'Тип заданий',groups:'Количество групп в упражнении',glen:'Сколько знаков в одной группе',hide:'Скрыть текст упражнения до проверки',dpm:'Скорость знаков: пиков (точек) в минуту',lpm:'Общий темп в буквах в минуту (с паузами)',tone:'Тон сигнала, Гц',vol:'Громкость',mask:'Вид упражнения: текст, точки-тире или скрыто',auto:'Автоматически воспроизводить после генерации',key:'Ключ: удерживайте для сигнала (или Пробел)'};
+const tips={gen:'Сгенерировать новое упражнение',play:'Воспроизвести упражнение заново',stop:'Остановить воспроизведение',skip:'Пропустить и перейти к следующему упражнению',chk:'Проверить ответ (Enter)',sel:'Выбор знаков для упражнения',accb:'Выбрать знаки, которые должны выпадать чаще (только режим «Тренировка»)',accw:'Во сколько раз чаще выпадают знаки акцента',wed:'Редактор списков слов',about:'О программе',det:'Подробная статистика сессии',rst:'Сбросить статистику',theme:'Тема оформления',lang:'Язык: русский или английский',mode:'Режим: тренировка, наставник, учитель',type:'Тип заданий',groups:'Количество групп в упражнении',glen:'Сколько знаков в одной группе',hide:'Скрыть текст упражнения до проверки',dpm:'Скорость знаков: пиков (точек) в минуту',lpm:'Общий темп в буквах в минуту (с паузами)',tone:'Тон сигнала, Гц',vol:'Громкость',mask:'Вид упражнения: текст, точки-тире или скрыто',auto:'Автоматически воспроизводить после генерации',key:'Ключ: удерживайте для сигнала (или Пробел)'};
 Object.entries(tips).forEach(([k,v])=>{const e=$(k);e.title=v;const l=e.closest('label');if(l)l.title=v});
 document.querySelectorAll('.card button').forEach(b=>b.addEventListener('mousedown',e=>e.preventDefault()));
 ui();renderStats();generate();
