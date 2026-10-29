@@ -43,7 +43,9 @@ textarea{width:100%;height:110px}table{width:100%;border-collapse:collapse;font-
 <label>Тон <input id="tone" type="range" min="400" max="1000" step="10" value="700"><b id="tonev"></b></label>
 <label>Громкость <input id="vol" type="range" min="0" max="100" value="50"><b id="volv"></b></label>
 <label>Маска <select id="mask"><option value="t">Аа</option><option value="m">• —</option><option value="n">Нет</option></select></label>
-<label><input type="checkbox" id="auto">♪ Авто</label></div>
+<label><input type="checkbox" id="auto">♪ Авто</label>
+<label><input type="checkbox" id="noise">📻 Радио-помехи</label>
+<label>Помехи <input id="nvol" type="range" min="0" max="100" value="30"><b id="nvolv"></b></label></div>
 </div>
 <div class="card">
 <div class="row"><button class="p" id="gen">Сгенерировать</button><button id="play">▶</button><button id="stop">■</button><button id="skip">▸▸</button></div>
@@ -58,7 +60,7 @@ textarea{width:100%;height:110px}table{width:100%;border-collapse:collapse;font-
 <dialog id="d5"><h3>Акцент — что подучить</h3><div style="font-size:13px;opacity:.8;margin-bottom:6px">Показаны знаки из «Задания». Отмеченные будут выпадать чаще (множитель — ползунок «Частота акцента»). Если не отмечено ничего или отмечено всё — частота у всех одинаковая.</div><div class="chars" id="achars"></div><div class="row"><button id="aall">Выбрать все</button><button id="anone">Снять все</button><button class="d">Отмена</button><button class="p" id="aapply">Применить</button></div></dialog>
 <dialog id="d2"><h3>Детальная статистика сессии</h3><div id="log"></div><div class="row"><button class="d">Закрыть</button></div></dialog>
 <dialog id="d3"><h3>Редактор слов</h3><div>Русские слова</div><textarea id="wru"></textarea><div>Английские слова</div><textarea id="wen"></textarea><div style="font-size:12px">Каждое слово на отдельной строке.</div><div class="row"><button id="wrs">Сбросить</button><button class="d">Отмена</button><button class="p" id="wap">Применить</button></div></dialog>
-<dialog id="d4"><h3>Тренажер Азбуки Морзе</h3><p>Русский и английский, режимы Тренировка (группы знаков на слух, с возможностью акцента на выбранных знаках), Наставник (по одному знаку с разбором ошибки) и Учитель (стучите ключом — приложение декодирует), маска символа, статистика, 3 темы.</p><div class="row"><button class="d">Закрыть</button></div></dialog>
+<dialog id="d4"><h3>Тренажер Азбуки Морзе</h3><p>Русский и английский, режимы Тренировка (группы знаков на слух, с возможностью акцента на выбранных знаках), Наставник (по одному знаку с разбором ошибки) и Учитель (стучите ключом — приложение декодирует), маска символа, статистика, 3 темы, радио-помехи (шум эфира, далёкие голоса, треск, свисты — генерируются на лету и не повторяются).</p><div class="row"><button class="d">Закрыть</button></div></dialog>
 </main>
 <script>
 const $=i=>document.getElementById(i);
@@ -67,7 +69,10 @@ const RUS={А:'.-',Б:'-...',В:'.--',Г:'--.',Д:'-..',Е:'.',Ж:'...-',З:'--.
 const DIG={1:'.----',2:'..---',3:'...--',4:'....-',5:'.....',6:'-....',7:'--...',8:'---..',9:'----.',0:'-----'};
 const SYM={'.':'......','!':'-.-.--',',':'--..--','?':'..--..','/':'-..-.','=':'-...-','+':'.-.-.','-':'-....-',':':'---...',';':'-.-.-.','(':'-.--.',')':'-.--.-','@':'.--.-.'};
 const WORDS={ru:'CQ,ТЕСТ,РАДИО,СВЯЗЬ,АНТЕННА,ЭФИР,МОРЗЕ,КЛЮЧ,ТОН,ПРИЕМ,ПЕРЕДАЧА,ЕКАТ,УРАЛ,ПРИВЕТ',en:'CQ,TEST,RADIO,MORSE,KEY,ANTENNA,SIGNAL,POWER,CALL,RIG,WIRE,TOWER,HELLO,SKY'};
-let S={theme:matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light',lang:'ru',mode:'train',type:'letters',groups:5,glen:5,hide:true,dpm:710,lpm:48,tone:700,vol:50,mask:'t',auto:false,sel:{},acc:{},accw:4,words:{ru:WORDS.ru.split(','),en:WORDS.en.split(',')}};
+// Необязательно: ссылки на длинные звуковые дорожки с шумом эфира/голосами (mp3/ogg, сервер должен отдавать файл напрямую).
+// Если список не пуст, дорожка проигрывается в цикле поверх сгенерированных помех, с периодическими прыжками на случайное место.
+const NOISE_URLS=[];
+let S={theme:matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light',lang:'ru',mode:'train',type:'letters',groups:5,glen:5,hide:true,dpm:710,lpm:48,tone:700,vol:50,mask:'t',auto:false,noise:false,nvol:30,sel:{},acc:{},accw:4,words:{ru:WORDS.ru.split(','),en:WORDS.en.split(',')}};
 try{Object.assign(S,JSON.parse(localStorage.getItem('morse2')||'{}'))}catch(e){}
 const save=()=>{try{localStorage.setItem('morse2',JSON.stringify(S))}catch(e){}};
 const table=()=>({...(S.lang=='ru'?RUS:LAT),...DIG,...SYM});
@@ -102,7 +107,11 @@ function showEx(){const T=table();const m=S.mode=='teacher'?'t':S.mask;
  if(S.hide&&!revealed&&S.mode!='teacher'){$('ex').textContent=target.replace(/[^ ]/g,'•');return}
  $('ex').textContent=m=='t'||S.mode=='teacher'?target:m=='m'?[...target].map(c=>c==' '?'/':T[c]||'?').join(' '):'• • •';
  if(S.mode=='teacher'&&S.mask=='n')$('ex').textContent='?';}
-function audio(){if(!ctx||ctx.state=='closed')ctx=new(window.AudioContext||window.webkitAudioContext)();if(ctx.state!='running'){try{const r=ctx.resume();if(r&&r.catch)r.catch(()=>{})}catch(e){}}return ctx}
+function audio(){const fresh=!ctx||ctx.state=='closed';if(fresh)ctx=new(window.AudioContext||window.webkitAudioContext)();
+ if(ctx.state!='running'){try{const r=ctx.resume();if(r&&r.catch)r.catch(()=>{})}catch(e){}}
+ // новый аудиоконтекст — помехи нужно собрать заново
+ if(fresh&&S.noise)setTimeout(startNoise,0);
+ return ctx}
 function stopAudio(){playId++;nodes.forEach(o=>{try{o.stop(0)}catch(e){}});nodes=[];
  if(master){try{master.gain.cancelScheduledValues(0);master.gain.value=0;master.disconnect()}catch(e){}master=null}playing=false}
 function play(){stopAudio();const id=playId;let c=audio();
@@ -122,7 +131,62 @@ function schedule(c){const T=table(),u=60/S.dpm,cg=Math.max(3*u,60/S.lpm-7*u);
    o.connect(g).connect(master);o.start(t);o.stop(t+d+.01);nodes.push(o);t+=d+u;}
   t+=cg-u;}
 }
-// уход со страницы: глушим звук; возврат: будим аудиоконтекст
+// ===== радио-помехи =====
+// Всё генерируется на лету: шум эфира с «замираниями», несколько далёких «голосов»
+// (пилообразный генератор через формантные фильтры, фразы и паузы случайной длины),
+// треск и редкие свисты. Случайность не даёт повторов. Работает, пока включён чек-бокс.
+let N=null;
+function noiseBuf(c){const len=c.sampleRate*6,b=c.createBuffer(1,len,c.sampleRate),d=b.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1;return b}
+function stopNoise(){if(!N)return;const n=N;N=null;n.ids.forEach(clearTimeout);n.nodes.forEach(o=>{try{o.stop(0)}catch(e){}});try{n.out.disconnect()}catch(e){}
+ if(n.el){clearInterval(n.elTmr);try{n.el.pause()}catch(e){}}}
+function startNoise(){stopNoise();if(!S.noise)return;const c=audio();
+ const out=c.createGain();out.gain.value=S.nvol/100;out.connect(c.destination);
+ const cur=N={out,nodes:[],ids:[],buf:noiseBuf(c),el:null,elTmr:0};
+ const nsrc=()=>{const s=c.createBufferSource();s.buffer=cur.buf;s.loop=true;s.start(0,Math.random()*5);cur.nodes.push(s);return s};
+ const osc=(type)=>{const o=c.createOscillator();o.type=type;o.start();cur.nodes.push(o);return o};
+ const filt=(type,f,q)=>{const b=c.createBiquadFilter();b.type=type;b.frequency.value=f;b.Q.value=q;return b};
+ const gain=v=>{const g=c.createGain();g.gain.value=v;return g};
+ let k=0;const loop=(fn,min,max)=>{const i=k++;const r=()=>{if(N!==cur)return;try{fn()}catch(e){}cur.ids[i]=setTimeout(r,min+Math.random()*(max-min))};r()};
+ // 1) шум эфира с медленными замираниями
+ const hiss=gain(.25),fade=gain(.7);
+ nsrc().connect(filt('bandpass',2200,.35)).connect(hiss).connect(fade).connect(out);
+ const hiss2=gain(.1);nsrc().connect(filt('lowpass',700,.7)).connect(hiss2).connect(out);
+ loop(()=>{fade.gain.setTargetAtTime(.3+Math.random()*.9,c.currentTime,1.2)},1500,5000);
+ // 2) далёкие голоса
+ const bus=gain(.55);bus.connect(filt('highpass',260,.7)).connect(filt('lowpass',3200,.7)).connect(out);
+ for(let n=0;n<3;n++){
+  const base=90+Math.random()*130,o=osc('sawtooth');o.frequency.value=base;
+  const mix=gain(1);o.connect(mix);nsrc().connect(gain(.35)).connect(mix);
+  const f1=filt('bandpass',500,6),f2=filt('bandpass',1500,8),vg=gain(0);vg.gain.value=0;
+  mix.connect(f1).connect(gain(1)).connect(vg);mix.connect(f2).connect(gain(.7)).connect(vg);vg.connect(bus);
+  let talk=false,until=0;
+  loop(()=>{const now=performance.now(),t=c.currentTime;
+   if(now>until){talk=!talk;until=now+(talk?1500+Math.random()*3500:800+Math.random()*5000)}
+   if(talk&&Math.random()>.15){
+    vg.gain.setTargetAtTime(.1+Math.random()*.5,t,.02);
+    f1.frequency.setTargetAtTime(300+Math.random()*500,t,.03);
+    f2.frequency.setTargetAtTime(900+Math.random()*1600,t,.03);
+    o.frequency.setTargetAtTime(base*(.85+Math.random()*.35),t,.05);
+   }else vg.gain.setTargetAtTime(0,t,.06)},90,230)}
+ // 3) треск
+ const crk=filt('highpass',1200,.7);crk.connect(out);
+ loop(()=>{const s=c.createBufferSource(),g=gain(.3+Math.random()*.7);s.buffer=cur.buf;s.connect(g).connect(crk);
+  const d=.01+Math.random()*.05;s.start(0,Math.random()*5,d)},250,4000);
+ // 4) редкие свисты-гетеродины
+ const wo=osc('sine'),wg=gain(0);wo.frequency.value=900;wo.connect(wg).connect(out);
+ loop(()=>{const t=c.currentTime,f=500+Math.random()*1500,d=1.5+Math.random()*3;
+  wo.frequency.cancelScheduledValues(t);wo.frequency.setValueAtTime(f,t);wo.frequency.linearRampToValueAtTime(f*(.6+Math.random()*.8),t+d);
+  wg.gain.cancelScheduledValues(t);wg.gain.setTargetAtTime(.04,t,.4);wg.gain.setTargetAtTime(0,t+d,.4)},8000,25000);
+ // 5) необязательная внешняя дорожка со случайными прыжками
+ if(NOISE_URLS.length){try{const el=new Audio(rnd(NOISE_URLS));el.loop=true;el.volume=Math.min(1,S.nvol/100);cur.el=el;
+  const jump=()=>{if(el.duration&&isFinite(el.duration))el.currentTime=Math.random()*el.duration};
+  el.addEventListener('loadedmetadata',jump);el.play().catch(()=>{});
+  cur.elTmr=setInterval(jump,25000+Math.random()*35000)}catch(e){}}
+}
+function setNoiseVol(){if(!N)return;try{N.out.gain.setTargetAtTime(S.nvol/100,ctx.currentTime,.05)}catch(e){}if(N.el)N.el.volume=Math.min(1,S.nvol/100)}
+// после первого жеста пользователя (политика автозапуска звука) запускаем помехи, если они были включены раньше
+['pointerdown','keydown','touchend'].forEach(n=>addEventListener(n,()=>{if(S.noise&&!N)startNoise()},true));
+// уход со страницы: глушим звук упражнения (помехи остаются); возврат: будим аудиоконтекст
 document.addEventListener('visibilitychange',()=>{if(document.hidden){stopAudio();beep(false)}else if(ctx&&ctx.state!='running'){try{ctx.resume().catch(()=>{})}catch(e){}}});
 addEventListener('pageshow',()=>{if(ctx&&ctx.state!='running'){try{ctx.resume().catch(()=>{})}catch(e){}}});
 function beep(on){if(on){const c=audio();beep.o=c.createOscillator();beep.g=c.createGain();beep.o.frequency.value=S.tone;beep.g.gain.value=S.vol/100*.5;beep.o.connect(beep.g).connect(c.destination);beep.o.start()}else if(beep.o){beep.o.stop();beep.o=null}}
@@ -184,18 +248,24 @@ $('wrs').onclick=()=>{$('wru').value=WORDS.ru.split(',').join('\n');$('wen').val
 $('wap').onclick=()=>{const f=v=>v.split('\n').map(s=>s.trim().toUpperCase()).filter(Boolean);S.words={ru:f($('wru').value),en:f($('wen').value)};save();$('d3').close()};
 $('about').onclick=()=>$('d4').showModal();
 // controls
-const rg=[['dpm','wpmv',''],['lpm','pausev',''],['tone','tonev',''],['vol','volv','%'],['accw','accwv','']];
-function ui(){document.documentElement.dataset.theme=S.theme;['theme','lang','mode','type','mask'].forEach(k=>$(k).value=S[k]);$('groups').value=S.groups;$('glen').value=S.glen;$('hide').checked=S.hide;$('auto').checked=S.auto;$('savest').checked=!!S.saveStats;rg.forEach(([a,b,s])=>{$(a).value=S[a];$(b).textContent=S[a]+s});
+const rg=[['dpm','wpmv',''],['lpm','pausev',''],['tone','tonev',''],['vol','volv','%'],['nvol','nvolv','%'],['accw','accwv','']];
+function ui(){document.documentElement.dataset.theme=S.theme;['theme','lang','mode','type','mask'].forEach(k=>$(k).value=S[k]);$('groups').value=S.groups;$('glen').value=S.glen;$('hide').checked=S.hide;$('auto').checked=S.auto;$('noise').checked=!!S.noise;$('savest').checked=!!S.saveStats;rg.forEach(([a,b,s])=>{$(a).value=S[a];$(b).textContent=S[a]+s});
  const showAcc=S.mode=='train'&&S.type!='words';$('accb').hidden=!showAcc;$('accrow').hidden=!showAcc;if(showAcc)accInfo()}
+// возврат фокуса в поле ответа после клика по «Авто» / «Радио-помехи» / ползунку помех
+const keepFocus=()=>{if(S.mode!='teacher'&&!$('ansbox').hidden&&!document.querySelector('dialog[open]'))$('ans').focus({preventScroll:true})};
+// не даём фокусу уходить с поля ответа уже при нажатии мыши (клик по самому чек-боксу или по его подписи)
+['auto','noise'].forEach(id=>{const e=$(id);e.addEventListener('mousedown',ev=>ev.preventDefault());e.closest('label').addEventListener('mousedown',ev=>ev.preventDefault())});
 ['theme','lang','mode','type','mask'].forEach(k=>$(k).onchange=e=>{S[k]=e.target.value;save();ui();if(k=='mask')showEx();else generate()});
 $('groups').onchange=e=>{S.groups=Math.max(1,Math.min(50,+e.target.value||5));save();generate()};
 $('savest').onchange=e=>{S.saveStats=e.target.checked;save();saveStats()};
-$('auto').onchange=e=>{S.auto=e.target.checked;save()};
+$('auto').onchange=e=>{S.auto=e.target.checked;save();keepFocus()};
+$('noise').onchange=e=>{S.noise=e.target.checked;save();if(S.noise)startNoise();else stopNoise();keepFocus()};
+$('nvol').addEventListener('change',keepFocus);
 $('glen').onchange=e=>{S.glen=Math.max(1,Math.min(20,+e.target.value||5));save();generate()};
 $('hide').onchange=e=>{S.hide=e.target.checked;save();showEx()};
-rg.forEach(([a,b,s])=>$(a).oninput=e=>{S[a]=+e.target.value;$(b).textContent=S[a]+s;save()});
+rg.forEach(([a,b,s])=>$(a).oninput=e=>{S[a]=+e.target.value;$(b).textContent=S[a]+s;save();if(a=='nvol')setNoiseVol()});
 $('gen').onclick=generate;$('play').onclick=()=>{play();if(S.mode!='teacher')$('ans').focus()};$('stop').onclick=stopAudio;$('skip').onclick=generate;$('chk').onclick=check;
-const tips={gen:'Сгенерировать новое упражнение',play:'Воспроизвести упражнение заново',stop:'Остановить воспроизведение',skip:'Пропустить и перейти к следующему упражнению',chk:'Проверить ответ (Enter)',sel:'Выбор знаков для упражнения',accb:'Выбрать знаки, которые должны выпадать чаще (только режим «Тренировка»)',accw:'Во сколько раз чаще выпадают знаки акцента',wed:'Редактор списков слов',about:'О программе',det:'Подробная статистика сессии',rst:'Сбросить статистику',theme:'Тема оформления',lang:'Язык: русский или английский',mode:'Режим: тренировка, наставник, учитель',type:'Тип заданий',groups:'Количество групп в упражнении',glen:'Сколько знаков в одной группе',savest:'Хранить статистику в браузере между визитами',hide:'Скрыть текст упражнения до проверки',dpm:'Скорость знаков: пиков (точек) в минуту',lpm:'Общий темп в буквах в минуту (с паузами)',tone:'Тон сигнала, Гц',vol:'Громкость',mask:'Вид упражнения: текст, точки-тире или скрыто',auto:'Автоматически воспроизводить после генерации',key:'Ключ: удерживайте для сигнала (или Пробел)'};
+const tips={gen:'Сгенерировать новое упражнение',play:'Воспроизвести упражнение заново',stop:'Остановить воспроизведение',skip:'Пропустить и перейти к следующему упражнению',chk:'Проверить ответ (Enter)',sel:'Выбор знаков для упражнения',accb:'Выбрать знаки, которые должны выпадать чаще (только режим «Тренировка»)',accw:'Во сколько раз чаще выпадают знаки акцента',wed:'Редактор списков слов',about:'О программе',det:'Подробная статистика сессии',rst:'Сбросить статистику',theme:'Тема оформления',lang:'Язык: русский или английский',mode:'Режим: тренировка, наставник, учитель',type:'Тип заданий',groups:'Количество групп в упражнении',glen:'Сколько знаков в одной группе',savest:'Хранить статистику в браузере между визитами',hide:'Скрыть текст упражнения до проверки',dpm:'Скорость знаков: пиков (точек) в минуту',lpm:'Общий темп в буквах в минуту (с паузами)',tone:'Тон сигнала, Гц',vol:'Громкость',mask:'Вид упражнения: текст, точки-тире или скрыто',auto:'Автоматически воспроизводить после генерации',noise:'Фоновые радио-помехи: шум эфира, далёкие голоса, треск, свисты',nvol:'Громкость радио-помех',key:'Ключ: удерживайте для сигнала (или Пробел)'};
 Object.entries(tips).forEach(([k,v])=>{const e=$(k);e.title=v;const l=e.closest('label');if(l)l.title=v});
 document.querySelectorAll('.card button').forEach(b=>b.addEventListener('mousedown',e=>e.preventDefault()));
 ui();renderStats();generate();
