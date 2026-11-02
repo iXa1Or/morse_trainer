@@ -107,15 +107,19 @@ function showEx(){const T=table();const m=S.mode=='teacher'?'t':S.mask;
  if(S.hide&&!revealed&&S.mode!='teacher'){$('ex').textContent=target.replace(/[^ ]/g,'•');return}
  $('ex').textContent=m=='t'||S.mode=='teacher'?target:m=='m'?[...target].map(c=>c==' '?'/':T[c]||'?').join(' '):'• • •';
  if(S.mode=='teacher'&&S.mask=='n')$('ex').textContent='?';}
-function audio(){const fresh=!ctx||ctx.state=='closed';if(fresh)ctx=new(window.AudioContext||window.webkitAudioContext)();
+let stale=false,hiddenAt=0;
+// stale: контекст мог «залипнуть» (долгое отсутствие, сон, bfcache) — пересоздаём его при ближайшем обращении
+function audio(){if(ctx&&stale){stopNoise();try{ctx.close()}catch(e){}ctx=null}stale=false;const fresh=!ctx||ctx.state=='closed';if(fresh)ctx=new(window.AudioContext||window.webkitAudioContext)();
  if(ctx.state!='running'){try{const r=ctx.resume();if(r&&r.catch)r.catch(()=>{})}catch(e){}}
  // новый аудиоконтекст — помехи нужно собрать заново
  if(fresh&&S.noise)setTimeout(startNoise,0);
  return ctx}
 function stopAudio(){playId++;nodes.forEach(o=>{try{o.stop(0)}catch(e){}});nodes=[];
  if(master){try{master.gain.cancelScheduledValues(0);master.gain.value=0;master.disconnect()}catch(e){}master=null}playing=false}
-function play(){stopAudio();const id=playId;let c=audio();
- const go=()=>{if(id!=playId)return;schedule(c)};
+function play(retry){stopAudio();const id=playId;let c=audio();
+ // сторожок: если после старта часы контекста не пошли, звука не будет — пересоздаём контекст и пробуем ещё раз
+ const watch=()=>{const t0=c.currentTime;setTimeout(()=>{if(id!=playId||c!==ctx)return;if(c.currentTime<=t0){stale=true;play(true)}},400)};
+ const go=()=>{if(id!=playId)return;schedule(c);if(!retry)watch()};
  if(c.state=='running'){go();return}
  // после возврата на страницу контекст может быть приостановлен: ждём resume, при неудаче создаём новый
  let done=false;const fin=()=>{if(done)return;done=true;go()};
@@ -185,10 +189,10 @@ function startNoise(){stopNoise();if(!S.noise)return;const c=audio();
 }
 function setNoiseVol(){if(!N)return;try{N.out.gain.setTargetAtTime(S.nvol/100,ctx.currentTime,.05)}catch(e){}if(N.el)N.el.volume=Math.min(1,S.nvol/100)}
 // после первого жеста пользователя (политика автозапуска звука) запускаем помехи, если они были включены раньше
-['pointerdown','keydown','touchend'].forEach(n=>addEventListener(n,()=>{if(S.noise&&!N)startNoise()},true));
+['pointerdown','keydown','touchend'].forEach(n=>addEventListener(n,()=>{if(stale&&ctx){audio();return}if(S.noise&&!N)startNoise()},true));
 // уход со страницы: глушим звук упражнения (помехи остаются); возврат: будим аудиоконтекст
-document.addEventListener('visibilitychange',()=>{if(document.hidden){stopAudio();beep(false)}else if(ctx&&ctx.state!='running'){try{ctx.resume().catch(()=>{})}catch(e){}}});
-addEventListener('pageshow',()=>{if(ctx&&ctx.state!='running'){try{ctx.resume().catch(()=>{})}catch(e){}}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){hiddenAt=Date.now();stopAudio();beep(false)}else{if(hiddenAt&&Date.now()-hiddenAt>15000)stale=true;else if(ctx&&ctx.state!='running'){try{ctx.resume().catch(()=>{})}catch(e){}}}});
+addEventListener('pageshow',e=>{if(e.persisted)stale=true;else if(ctx&&ctx.state!='running'){try{ctx.resume().catch(()=>{})}catch(e){}}});
 function beep(on){if(on){const c=audio();beep.o=c.createOscillator();beep.g=c.createGain();beep.o.frequency.value=S.tone;beep.g.gain.value=S.vol/100*.5;beep.o.connect(beep.g).connect(c.destination);beep.o.start()}else if(beep.o){beep.o.stop();beep.o=null}}
 function record(exp,got){const okk=exp==got;stats.n++;if(okk){stats.ok++;stats.ser++;stats.max=Math.max(stats.max,stats.ser)}else stats.ser=0;
  stats.log.push({exp,got,ok:okk});renderStats();saveStats();return okk}
